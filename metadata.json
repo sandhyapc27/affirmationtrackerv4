@@ -1,0 +1,5 @@
+{
+  "name": "My Affirmation Tracker",
+  "description": "Transform negative thoughts into positive power with AI-generated affirmations and voice-activated tracking.",
+  "requestFramePermissions": ["microphone"]
+}

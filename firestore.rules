@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - subscription: string (enum: ['free', 'paid'])
+    //   - usageCount: number
+    //   - createdAt: timestamp
+    //
+    // Collection: users/{userId}/recordings
+    // Document ID: {recordingId}
+    // Fields:
+    //   - id: string
+    //   - title: string
+    //   - audioData: string (base64 or ref)
+    //   - duration: number
+    //   - createdAt: timestamp
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'subscription', 'usageCount']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.subscription in ['free', 'paid'] &&
+             data.usageCount is number;
+    }
+
+    function isValidRecording(data) {
+      return data.keys().hasAll(['title', 'audioData', 'createdAt']) &&
+             data.title is string && data.title.size() < 200 &&
+             data.audioData is string && 
+             (data.keys().hasAny(['audioUrl']) ? data.audioUrl is string : true);
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          request.auth.token.email == "sandhya.prathap@gmail.com");
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                    (request.resource.data.subscription == resource.data.subscription || isAdmin());
+      
+      match /recordings/{recordingId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidRecording(request.resource.data);
+        allow update: if isOwner(userId) && isValidRecording(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

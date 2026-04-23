@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and subscription status",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "subscription": { "type": "string", "enum": ["free", "paid"], "description": "Subscription tier" },
+        "usageCount": { "type": "number", "description": "Number of times the counter has been used" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "subscription", "usageCount"]
+    },
+    "MantraRecording": {
+      "title": "Mantra Recording",
+      "description": "Saved mantra audio metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "audioData": { "type": "string", "description": "Fallback or text-only marker" },
+        "audioUrl": { "type": "string", "description": "Firebase Storage download URL" },
+        "duration": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "audioData", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile document"
+    },
+    "/users/{userId}/recordings/{recordingId}": {
+      "schema": "MantraRecording",
+      "description": "User's saved mantra recordings"
+    }
+  }
+}
