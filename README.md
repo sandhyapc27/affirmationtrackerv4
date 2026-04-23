@@ -1,11 +1,10 @@
 # My Affirmation Tracker
 
-This repository contains the affirmation tracker projects you have been building, including the `affirmationtrackv3` app with the onboarding-inspired home screen and bottom navigation.
+This repository contains the affirmation tracker app you have been building, including the `affirmationtrackv3` app with the onboarding-inspired home screen and bottom navigation.
 
 ## Project Structure
 
 - `affirmationtrackv3/` - main React app version with the current UI
-- `rebuild-step-by-step/` - learning rebuild version created step by step
 - `src/` - original app source scaffold from the initial project setup
 - Firebase config/rules files at root for backend setup reference
 
