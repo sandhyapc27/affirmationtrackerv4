@@ -1,7 +1,11 @@
+import { GoogleGenAI, Type } from "@google/genai";
 import { useEffect, useRef, useState } from "react";
+import { voiceService } from "./services/voiceService";
 
 const dm = "'DM Sans', sans-serif";
 const cg = "'Cormorant Garamond', Georgia, serif";
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+const genAI = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 function Starfield() {
   const ref = useRef(null);
@@ -137,9 +141,21 @@ function SacredRing({ size = 140 }) {
 }
 
 export default function HomeScreen() {
-  const [activeTab, setActiveTab] = useState(null);
   const [currentScreen, setCurrentScreen] = useState("home");
   const [greeting, setGreeting] = useState("Good evening");
+  const [negativeThoughts, setNegativeThoughts] = useState("");
+  const [generatedAffirmations, setGeneratedAffirmations] = useState([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState("");
+  const [mantra, setMantra] = useState("");
+  const [targetCount, setTargetCount] = useState(11);
+  const [currentCount, setCurrentCount] = useState(0);
+  const [isListening, setIsListening] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const [trackError, setTrackError] = useState("");
+  const [savedSessions, setSavedSessions] = useState([]);
+  const targetCountInputRef = useRef(null);
 
   useEffect(() => {
     const h = new Date().getHours();
@@ -147,6 +163,128 @@ export default function HomeScreen() {
     else if (h < 17) setGreeting("Good afternoon");
     else setGreeting("Good evening");
   }, []);
+
+  useEffect(() => {
+    return () => {
+      voiceService.stopCounting();
+    };
+  }, []);
+
+  const generateAffirmations = async () => {
+    if (!negativeThoughts.trim() || isGenerating) return;
+
+    if (!genAI) {
+      setGenerationError("Missing API key. Set VITE_GEMINI_API_KEY in your .env.local file.");
+      return;
+    }
+
+    setIsGenerating(true);
+    setGenerationError("");
+    setGeneratedAffirmations([]);
+
+    try {
+      const response = await genAI.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: `I am feeling these worries, fears, and stressful thoughts: "${negativeThoughts}".
+Transform these into exactly 3 personalized, empowering positive affirmations in first person.
+Keep each affirmation concise, warm, and emotionally grounding.
+Return ONLY a JSON array of 3 strings.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+          },
+        },
+      });
+
+      const parsed = JSON.parse(response.text ?? "[]");
+      const cleaned = Array.isArray(parsed)
+        ? parsed.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
+        : [];
+
+      if (cleaned.length === 0) {
+        throw new Error("No affirmations generated.");
+      }
+
+      setGeneratedAffirmations(cleaned);
+    } catch (error) {
+      console.error("AI generation error:", error);
+      setGenerationError("I could not generate affirmations right now. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleStartCounting = () => {
+    if (!mantra.trim()) {
+      setTrackError("Please enter your affirmation first.");
+      return;
+    }
+    if (!targetCount || targetCount < 1) {
+      setTrackError("Please enter a valid target count.");
+      return;
+    }
+
+    setTrackError("");
+    setCurrentCount(0);
+    setLiveTranscript("");
+    setIsPaused(false);
+    setCurrentScreen("trackCounter");
+    setIsListening(true);
+
+    voiceService.startCounting(
+      mantra,
+      () => {
+        setCurrentCount((previous) => {
+          const next = previous + 1;
+          if (next >= targetCount) {
+            setTimeout(() => {
+              voiceService.stopCounting();
+              setIsListening(false);
+            }, 200);
+          }
+          return next;
+        });
+      },
+      (transcript) => setLiveTranscript(transcript),
+      (errorMessage) => {
+        setTrackError(errorMessage);
+        setIsListening(false);
+      },
+    );
+  };
+
+  const handleStopCounting = () => {
+    voiceService.stopCounting();
+    setIsListening(false);
+    setIsPaused(false);
+    if (mantra.trim() && currentCount > 0) {
+      setSavedSessions((previous) => [
+        {
+          id: Date.now(),
+          mantra: mantra.trim(),
+          completedCount: currentCount,
+          targetCount: Math.max(1, targetCount),
+          createdAt: new Date().toISOString(),
+        },
+        ...previous,
+      ]);
+    }
+    setCurrentScreen("trackSetup");
+  };
+
+  const handlePauseResume = () => {
+    if (isPaused) {
+      voiceService.resumeCounting();
+      setIsPaused(false);
+      setIsListening(true);
+      return;
+    }
+    voiceService.pauseCounting();
+    setIsPaused(true);
+    setIsListening(false);
+  };
 
   return (
     <div
@@ -291,7 +429,7 @@ export default function HomeScreen() {
             </p>
             <h1
               style={{
-                fontSize: 36,
+                fontSize: currentScreen === "home" ? 36 : 22,
                 fontWeight: 700,
                 color: "#FFFFFF",
                 margin: 0,
@@ -316,7 +454,7 @@ export default function HomeScreen() {
             {currentScreen === "home" ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <button
-                onClick={() => setActiveTab("create")}
+                onClick={() => setCurrentScreen("create")}
                 style={{
                   flex: 1,
                   padding: "28px 24px",
@@ -366,7 +504,7 @@ export default function HomeScreen() {
               </button>
 
               <button
-                onClick={() => setActiveTab("track")}
+                onClick={() => setCurrentScreen("trackSetup")}
                 style={{
                   flex: 1,
                   padding: "28px 24px",
@@ -416,7 +554,7 @@ export default function HomeScreen() {
               </button>
 
               <button
-                onClick={() => setActiveTab("listen")}
+                onClick={() => {}}
                 style={{
                   flex: 1,
                   padding: "28px 24px",
@@ -465,6 +603,351 @@ export default function HomeScreen() {
                 </div>
               </button>
               </div>
+            ) : currentScreen === "create" ? (
+              <div
+                style={{
+                  borderRadius: 22,
+                  border: "1px solid rgba(232,228,240,0.12)",
+                  background: "linear-gradient(180deg, rgba(28,21,56,0.65) 0%, rgba(16,16,45,0.8) 100%)",
+                  padding: "18px 16px",
+                  animation: "fadeUp 0.5s ease both",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <h2 style={{ margin: 0, color: "#FFFFFF", fontSize: 28, lineHeight: 1.1 }}>Create</h2>
+                  <button
+                    onClick={() => setCurrentScreen("home")}
+                    style={{
+                      border: "1px solid rgba(232,228,240,0.2)",
+                      background: "rgba(232,228,240,0.08)",
+                      color: "rgba(255,255,255,0.85)",
+                      borderRadius: 10,
+                      padding: "6px 10px",
+                      fontFamily: dm,
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Back
+                  </button>
+                </div>
+
+                <p style={{ margin: 0, color: "rgba(232,228,240,0.6)", fontFamily: dm, fontSize: 13, lineHeight: 1.5 }}>
+                  Share what is stressing you right now. AI will flip the script into 3 personalized affirmations.
+                </p>
+
+                <textarea
+                  value={negativeThoughts}
+                  onChange={(event) => setNegativeThoughts(event.target.value)}
+                  placeholder="Example: I feel anxious about my future and worried I am falling behind."
+                  style={{
+                    width: "100%",
+                    minHeight: 120,
+                    resize: "vertical",
+                    borderRadius: 14,
+                    border: "1px solid rgba(232,228,240,0.2)",
+                    background: "rgba(0,0,0,0.2)",
+                    color: "#FFFFFF",
+                    padding: "12px 14px",
+                    boxSizing: "border-box",
+                    fontFamily: dm,
+                    fontSize: 14,
+                    outline: "none",
+                  }}
+                />
+
+                <button
+                  onClick={generateAffirmations}
+                  disabled={isGenerating || !negativeThoughts.trim()}
+                  style={{
+                    borderRadius: 14,
+                    border: "1px solid rgba(212,168,67,0.4)",
+                    background: isGenerating || !negativeThoughts.trim()
+                      ? "rgba(212,168,67,0.15)"
+                      : "linear-gradient(160deg, rgba(212,168,67,0.25) 0%, rgba(212,168,67,0.12) 100%)",
+                    color: "#F8E7A3",
+                    padding: "12px 14px",
+                    fontFamily: dm,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: isGenerating || !negativeThoughts.trim() ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {isGenerating ? "Generating affirmations..." : "Flip the script"}
+                </button>
+
+                {generationError && (
+                  <p style={{ margin: 0, color: "#ffb4b4", fontFamily: dm, fontSize: 13 }}>
+                    {generationError}
+                  </p>
+                )}
+
+                {generatedAffirmations.length > 0 && (
+                  <div style={{ display: "grid", gap: 10, marginTop: 4 }}>
+                    {generatedAffirmations.map((affirmation, index) => (
+                      <button
+                        key={`${affirmation}-${index}`}
+                        onClick={() => {
+                          setMantra(affirmation);
+                          setCurrentScreen("trackSetup");
+                        }}
+                        style={{
+                          borderRadius: 12,
+                          border: "1px solid rgba(212,168,67,0.25)",
+                          background: "rgba(212,168,67,0.08)",
+                          color: "rgba(255,255,255,0.92)",
+                          padding: "12px 14px",
+                          fontFamily: dm,
+                          fontSize: 14,
+                          lineHeight: 1.5,
+                          textAlign: "left",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {affirmation}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : currentScreen === "trackSetup" ? (
+              <div
+                style={{
+                  borderRadius: 22,
+                  border: "1px solid rgba(232,228,240,0.12)",
+                  background: "linear-gradient(180deg, rgba(28,21,56,0.65) 0%, rgba(16,16,45,0.8) 100%)",
+                  padding: "18px 16px",
+                  animation: "fadeUp 0.5s ease both",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <h2 style={{ margin: 0, color: "#FFFFFF", fontSize: 28, lineHeight: 1.1 }}>Setup Session</h2>
+                  <button
+                    onClick={() => setCurrentScreen("home")}
+                    style={{
+                      border: "1px solid rgba(232,228,240,0.2)",
+                      background: "rgba(232,228,240,0.08)",
+                      color: "rgba(255,255,255,0.85)",
+                      borderRadius: 10,
+                      padding: "6px 10px",
+                      fontFamily: dm,
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Back
+                  </button>
+                </div>
+
+                <label style={{ color: "rgba(232,228,240,0.6)", fontFamily: dm, fontSize: 13 }}>
+                  Your Affirmation
+                </label>
+                <textarea
+                  value={mantra}
+                  onChange={(event) => setMantra(event.target.value)}
+                  placeholder="I am calm, capable, and growing every day."
+                  style={{
+                    width: "100%",
+                    minHeight: 115,
+                    resize: "vertical",
+                    borderRadius: 14,
+                    border: "1px solid rgba(232,228,240,0.2)",
+                    background: "rgba(0,0,0,0.2)",
+                    color: "#FFFFFF",
+                    padding: "12px 14px",
+                    boxSizing: "border-box",
+                    fontFamily: dm,
+                    fontSize: 16,
+                    outline: "none",
+                  }}
+                />
+
+                <label style={{ color: "rgba(232,228,240,0.6)", fontFamily: dm, fontSize: 13 }}>
+                  Target Count
+                </label>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+                  <input
+                    ref={targetCountInputRef}
+                    type="number"
+                    min={1}
+                    value={targetCount}
+                    onChange={(event) => setTargetCount(Number(event.target.value) || 0)}
+                    style={{
+                      width: "100%",
+                      borderRadius: 14,
+                      border: "1px solid rgba(232,228,240,0.2)",
+                      background: "rgba(0,0,0,0.2)",
+                      color: "#FFFFFF",
+                      padding: "12px 14px",
+                      boxSizing: "border-box",
+                      fontFamily: dm,
+                      fontSize: 22,
+                      outline: "none",
+                    }}
+                  />
+
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {[11, 21, 108].map((preset) => (
+                      <button
+                        key={preset}
+                        onClick={() => setTargetCount(preset)}
+                        style={{
+                          borderRadius: 12,
+                          border: "1px solid rgba(232,228,240,0.15)",
+                          background: targetCount === preset ? "rgba(124,58,237,0.35)" : "rgba(232,228,240,0.07)",
+                          color: targetCount === preset ? "#f2e8ff" : "rgba(232,228,240,0.72)",
+                          padding: "8px 12px",
+                          fontFamily: dm,
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {preset} Sets
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => {
+                        targetCountInputRef.current?.focus();
+                        targetCountInputRef.current?.select();
+                      }}
+                      style={{
+                        borderRadius: 12,
+                        border: "1px solid rgba(232,228,240,0.15)",
+                        background: ![11, 21, 108].includes(targetCount)
+                          ? "rgba(124,58,237,0.35)"
+                          : "rgba(232,228,240,0.07)",
+                        color: ![11, 21, 108].includes(targetCount)
+                          ? "#f2e8ff"
+                          : "rgba(232,228,240,0.72)",
+                        padding: "8px 12px",
+                        fontFamily: dm,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Custom
+                    </button>
+                    <span style={{ color: "rgba(232,228,240,0.45)", fontSize: 12, alignSelf: "center", fontFamily: dm }}>
+                      Or use custom number
+                    </span>
+                  </div>
+                </div>
+
+                {trackError && (
+                  <p style={{ margin: 0, color: "#ffb4b4", fontFamily: dm, fontSize: 13 }}>{trackError}</p>
+                )}
+
+                <button
+                  onClick={handleStartCounting}
+                  style={{
+                    borderRadius: 14,
+                    border: "1px solid rgba(124,58,237,0.5)",
+                    background: "linear-gradient(160deg, rgba(124,58,237,0.9) 0%, rgba(124,58,237,0.6) 100%)",
+                    color: "#FFFFFF",
+                    padding: "12px 14px",
+                    fontFamily: dm,
+                    fontSize: 18,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Start Tracking
+                </button>
+              </div>
+            ) : currentScreen === "trackCounter" ? (
+              <div
+                style={{
+                  borderRadius: 22,
+                  border: "1px solid rgba(232,228,240,0.12)",
+                  background: "linear-gradient(180deg, rgba(28,21,56,0.65) 0%, rgba(16,16,45,0.8) 100%)",
+                  padding: "18px 16px",
+                  animation: "fadeUp 0.5s ease both",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                <p style={{ margin: 0, color: "rgba(232,228,240,0.75)", fontFamily: cg, fontSize: 26, textAlign: "center" }}>
+                  "{mantra}"
+                </p>
+                <p style={{ margin: 0, color: isListening ? "#9bf5bf" : "rgba(232,228,240,0.55)", fontFamily: dm, fontSize: 12 }}>
+                  {isListening ? "Microphone listening..." : "Microphone paused"}
+                </p>
+                {liveTranscript && (
+                  <p style={{ margin: 0, color: "rgba(232,228,240,0.65)", fontFamily: dm, fontSize: 12, fontStyle: "italic" }}>
+                    Heard: "{liveTranscript}"
+                  </p>
+                )}
+
+                <svg width="290" height="290" style={{ transform: "rotate(-90deg)" }}>
+                  <circle cx="145" cy="145" r="120" stroke="rgba(232,228,240,0.15)" strokeWidth="5" fill="transparent" />
+                  <circle
+                    cx="145"
+                    cy="145"
+                    r="120"
+                    stroke="#7c3aed"
+                    strokeWidth="5"
+                    fill="transparent"
+                    strokeDasharray={2 * Math.PI * 120}
+                    strokeDashoffset={(2 * Math.PI * 120) * (1 - Math.min(currentCount / Math.max(1, targetCount), 1))}
+                    style={{ transition: "stroke-dashoffset 0.5s ease" }}
+                  />
+                </svg>
+
+                <div style={{ marginTop: -185, textAlign: "center" }}>
+                  <p style={{ margin: 0, color: "#FFFFFF", fontFamily: cg, fontSize: 62, lineHeight: 1 }}>{currentCount}</p>
+                  <p style={{ margin: 0, color: "rgba(232,228,240,0.55)", fontFamily: dm, fontSize: 12 }}>
+                    of {Math.max(1, targetCount)}
+                  </p>
+                </div>
+
+                <div style={{ marginTop: 26, display: "flex", gap: 10, width: "100%" }}>
+                  <button
+                    onClick={handlePauseResume}
+                    style={{
+                      flex: "0 0 auto",
+                      borderRadius: 14,
+                      border: "1px solid rgba(232,228,240,0.28)",
+                      background: "rgba(232,228,240,0.12)",
+                      color: "#FFFFFF",
+                      padding: "12px 14px",
+                      fontFamily: dm,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      minWidth: 98,
+                    }}
+                  >
+                    {isPaused ? "Resume" : "Pause"}
+                  </button>
+                  <button
+                    onClick={handleStopCounting}
+                    style={{
+                      flex: 1,
+                      borderRadius: 14,
+                      border: "1px solid rgba(232,228,240,0.28)",
+                      background: "rgba(232,228,240,0.12)",
+                      color: "#FFFFFF",
+                      padding: "12px 16px",
+                      fontFamily: dm,
+                      fontSize: 16,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Finish Session
+                  </button>
+                </div>
+              </div>
             ) : (
               <div
                 style={{
@@ -483,13 +966,21 @@ export default function HomeScreen() {
               </p>
               <h2 style={{ margin: 0, color: "#FFFFFF", fontSize: 28, lineHeight: 1.1 }}>Saved Affirmations</h2>
               <div style={{ marginTop: 6, display: "grid", gap: 10 }}>
-                {[
-                  "I am grounded, safe, and supported.",
-                  "I choose progress over perfection.",
-                  "I trust my growth and my timing.",
-                ].map((item) => (
+                {(savedSessions.length > 0
+                  ? savedSessions.map((session) => ({
+                      key: session.id,
+                      text: `"${session.mantra}"`,
+                      meta: `${session.completedCount}/${session.targetCount} recitations`,
+                    }))
+                  : [
+                      {
+                        key: "placeholder-1",
+                        text: "No saved sessions yet.",
+                        meta: "Complete a Track session and tap Finish Session",
+                      },
+                    ]).map((item) => (
                   <div
-                    key={item}
+                    key={item.key}
                     style={{
                       borderRadius: 14,
                       border: "1px solid rgba(232,228,240,0.12)",
@@ -500,7 +991,8 @@ export default function HomeScreen() {
                       fontSize: 14,
                     }}
                   >
-                    {item}
+                    <div style={{ fontSize: 15 }}>{item.text}</div>
+                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>{item.meta}</div>
                   </div>
                 ))}
               </div>
