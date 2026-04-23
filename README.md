@@ -1,20 +1,46 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# My Affirmation Tracker
 
-# Run and deploy your AI Studio app
+This repository contains the affirmation tracker projects you have been building, including the `affirmationtrackv3` app with the onboarding-inspired home screen and bottom navigation.
 
-This contains everything you need to run your app locally.
+## Project Structure
 
-View your app in AI Studio: https://ai.studio/apps/b4f0743f-afdc-49ac-9920-5c1ce77f54a9
+- `affirmationtrackv3/` - main React app version with the current UI
+- `rebuild-step-by-step/` - learning rebuild version created step by step
+- `src/` - original app source scaffold from the initial project setup
+- Firebase config/rules files at root for backend setup reference
 
-## Run Locally
+## Quick Start (Main App)
 
-**Prerequisites:**  Node.js
+Use these commands to run the current main app:
 
+```bash
+cd "affirmationtrackv3"
+npm install
+npm run dev
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Then open [http://localhost:5173](http://localhost:5173).
+
+## Build for Production
+
+From inside `affirmationtrackv3/`:
+
+```bash
+npm run build
+```
+
+## Git Workflow (Simple)
+
+From the repository root:
+
+```bash
+git status
+git add .
+git commit -m "Your commit message"
+git push
+```
+
+## Notes
+
+- If UI updates do not appear, do a hard refresh: `Cmd + Shift + R` on Mac.
+- Keep this README updated as new screens/features are added.
