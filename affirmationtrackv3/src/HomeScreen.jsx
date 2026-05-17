@@ -171,6 +171,13 @@ export default function HomeScreen() {
   const replayCountsRef = useRef({});
   const infiniteReplayRef = useRef({});
   const replayTimeoutRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const firstRepChunksRef = useRef([]);
+  const firstRepCapturedRef = useRef(false);
+  const firstRepAudioUrlRef = useRef("");
+  const firstRepStopResolveRef = useRef(null);
+  const firstRepCaptureTimerRef = useRef(null);
   const targetCountInputRef = useRef(null);
   const formattedSavedSessions = savedSessions.map((session) => ({
     ...session,
@@ -201,8 +208,121 @@ export default function HomeScreen() {
       if (typeof window !== "undefined" && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
+      if (firstRepCaptureTimerRef.current) {
+        clearTimeout(firstRepCaptureTimerRef.current);
+      }
+      if (firstRepAudioUrlRef.current) {
+        URL.revokeObjectURL(firstRepAudioUrlRef.current);
+      }
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
     };
   }, []);
+  const startFirstRepRecorder = async () => {
+    if (
+      typeof window === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof window.MediaRecorder === "undefined"
+    ) {
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+      firstRepChunksRef.current = [];
+      firstRepCapturedRef.current = false;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          firstRepChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        if (firstRepCapturedRef.current) return;
+        firstRepCapturedRef.current = true;
+        const mimeType = recorder.mimeType || "audio/webm";
+        const blob = new Blob(firstRepChunksRef.current, { type: mimeType });
+        if (blob.size > 0) {
+          firstRepAudioUrlRef.current = URL.createObjectURL(blob);
+        }
+        if (mediaStreamRef.current) {
+          mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+          mediaStreamRef.current = null;
+        }
+        if (firstRepStopResolveRef.current) {
+          firstRepStopResolveRef.current(firstRepAudioUrlRef.current || "");
+          firstRepStopResolveRef.current = null;
+        }
+      };
+
+      recorder.start();
+    } catch (error) {
+      console.error("Unable to start first rep recorder:", error);
+    }
+  };
+
+  const stopFirstRepRecorder = () => {
+    return new Promise((resolve) => {
+      if (firstRepCapturedRef.current) {
+        resolve(firstRepAudioUrlRef.current || "");
+        return;
+      }
+
+      firstRepStopResolveRef.current = resolve;
+
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== "inactive") {
+        try {
+          if (typeof recorder.requestData === "function") {
+            recorder.requestData();
+          }
+          setTimeout(() => {
+            try {
+              recorder.stop();
+            } catch (error) {
+              console.error("Unable to stop first rep recorder:", error);
+              if (firstRepStopResolveRef.current) {
+                firstRepStopResolveRef.current(firstRepAudioUrlRef.current || "");
+                firstRepStopResolveRef.current = null;
+              }
+            }
+          }, 250);
+        } catch (error) {
+          console.error("Unable to stop first rep recorder:", error);
+          if (firstRepStopResolveRef.current) {
+            firstRepStopResolveRef.current(firstRepAudioUrlRef.current || "");
+            firstRepStopResolveRef.current = null;
+          }
+        }
+      } else {
+        if (mediaStreamRef.current) {
+          mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+          mediaStreamRef.current = null;
+        }
+        if (firstRepStopResolveRef.current) {
+          firstRepStopResolveRef.current(firstRepAudioUrlRef.current || "");
+          firstRepStopResolveRef.current = null;
+        }
+      }
+    });
+  };
+
+  const captureFirstRepSnippet = async () => {
+    if (firstRepCapturedRef.current) return;
+    await startFirstRepRecorder();
+    if (firstRepCaptureTimerRef.current) {
+      clearTimeout(firstRepCaptureTimerRef.current);
+    }
+    firstRepCaptureTimerRef.current = setTimeout(() => {
+      stopFirstRepRecorder();
+      firstRepCaptureTimerRef.current = null;
+    }, 1400);
+  };
+
 
   useEffect(() => {
     if (currentScreen !== "library") {
@@ -283,37 +403,68 @@ Return ONLY a JSON array of 3 strings.`,
     setLiveTranscript("");
     setIsPaused(false);
     setCurrentScreen("trackCounter");
-    setIsListening(true);
-
-    voiceService.startCounting(
-      mantra,
-      () => {
-        setCurrentCount((previous) => {
-          const next = previous + 1;
-          if (next >= targetCount) {
-            setTimeout(() => {
-              voiceService.stopCounting();
-              setIsListening(false);
-            }, 200);
+    setIsListening(false);
+    const beginTrackCounting = () => {
+      if (firstRepAudioUrlRef.current) {
+        URL.revokeObjectURL(firstRepAudioUrlRef.current);
+        firstRepAudioUrlRef.current = "";
+      }
+      const started = voiceService.startCounting(
+        mantra,
+        () => {
+          setCurrentCount((previous) => {
+            const next = previous + 1;
+            if (next === 1) {
+              captureFirstRepSnippet();
+            }
+            if (next >= targetCount) {
+              setTimeout(() => {
+                voiceService.stopCounting();
+                setIsListening(false);
+              }, 200);
+            }
+            return next;
+          });
+        },
+        (transcript) => {
+          setLiveTranscript(transcript);
+        },
+        (errorMessage) => {
+          const lower = String(errorMessage).toLowerCase();
+          if (lower.includes("network")) {
+            // Transient in Web Speech; onend auto-restarts while counting mode is active.
+            return;
           }
-          return next;
-        });
-      },
-      (transcript) => setLiveTranscript(transcript),
-      (errorMessage) => {
-        setTrackError(errorMessage);
-        const lower = String(errorMessage).toLowerCase();
-        const isFatalPermissionError =
-          lower.includes("not-allowed") || lower.includes("service-not-allowed");
-        if (isFatalPermissionError) {
-          setIsListening(false);
-        }
-      },
-    );
+          setTrackError(`Microphone error: ${errorMessage}`);
+          const isFatalPermissionError =
+            lower.includes("not-allowed") || lower.includes("service-not-allowed");
+          if (isFatalPermissionError) {
+            setIsListening(false);
+          }
+        },
+      );
+      setIsListening(!!started);
+      if (!started) {
+        setTrackError("Microphone could not start. Please allow mic access and try again.");
+      }
+    };
+
+    if (isSetupVoiceInputActive) {
+      voiceService.pauseCounting();
+      setIsSetupVoiceInputActive(false);
+      setTimeout(() => beginTrackCounting(), 250);
+    } else {
+      beginTrackCounting();
+    }
   };
 
-  const handleStopCounting = () => {
+  const handleStopCounting = async () => {
     voiceService.stopCounting();
+    if (firstRepCaptureTimerRef.current) {
+      clearTimeout(firstRepCaptureTimerRef.current);
+      firstRepCaptureTimerRef.current = null;
+    }
+    const capturedAudioUrl = await stopFirstRepRecorder();
     setIsListening(false);
     setIsPaused(false);
     if (mantra.trim() && currentCount > 0) {
@@ -324,6 +475,7 @@ Return ONLY a JSON array of 3 strings.`,
           completedCount: currentCount,
           targetCount: Math.max(1, targetCount),
           createdAt: new Date().toISOString(),
+          audioUrl: capturedAudioUrl || firstRepAudioUrlRef.current || null,
         },
         ...previous,
       ]);
@@ -370,6 +522,18 @@ Return ONLY a JSON array of 3 strings.`,
     });
   };
 
+  const playSessionAudioOnce = (session) => {
+    if (!session?.audioUrl) {
+      return speakSessionOnce(session?.mantra || "");
+    }
+    return new Promise((resolve) => {
+      const audio = new Audio(session.audioUrl);
+      audio.onended = () => resolve();
+      audio.onerror = () => resolve();
+      audio.play().catch(() => resolve());
+    });
+  };
+
   const handleReplay = async (session) => {
     if (playingSessionId === session.id) {
       stopReplay();
@@ -386,7 +550,7 @@ Return ONLY a JSON array of 3 strings.`,
       if (playingSessionIdRef.current !== session.id && repeat > 0) return;
       repeat += 1;
       setCurrentRepeat(repeat);
-      await speakSessionOnce(session.mantra);
+      await playSessionAudioOnce(session);
 
       const latestInfinite = !!infiniteReplayRef.current[session.id];
       const latestCountTarget = Math.max(1, replayCountsRef.current[session.id] || 1);
@@ -587,7 +751,7 @@ Return ONLY a JSON array of 3 strings.`,
                   style={{
                     display: "flex",
                     justifyContent: "center",
-                    margin: "12px 0 16px",
+                    margin: "4px 0 8px",
                     animation: "fadeUp 0.8s ease both 0.3s",
                   }}
                 >
@@ -597,7 +761,7 @@ Return ONLY a JSON array of 3 strings.`,
             )}
 
             {currentScreen === "home" ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: -16 }}>
               <button
                 onClick={() => setCurrentScreen("create")}
                 style={{
@@ -1053,6 +1217,20 @@ Return ONLY a JSON array of 3 strings.`,
                 <p style={{ margin: 0, color: isListening ? "#9bf5bf" : "rgba(232,228,240,0.55)", fontFamily: dm, fontSize: 12 }}>
                   {isListening ? "Microphone listening..." : "Microphone paused"}
                 </p>
+                {trackError && (
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#ffb4b4",
+                      fontFamily: dm,
+                      fontSize: 12,
+                      textAlign: "center",
+                      maxWidth: 280,
+                    }}
+                  >
+                    {trackError}
+                  </p>
+                )}
                 {liveTranscript && (
                   <p style={{ margin: 0, color: "rgba(232,228,240,0.65)", fontFamily: dm, fontSize: 12, fontStyle: "italic" }}>
                     Heard: "{liveTranscript}"

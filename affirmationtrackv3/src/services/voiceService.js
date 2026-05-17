@@ -27,10 +27,17 @@ class VoiceService {
   startCounting(mantra, onMatch, onTranscript, onError) {
     if (!this.recognition) {
       onError?.("Speech recognition is not supported in this browser.");
-      return;
+      return false;
     }
 
-    if (this.isRunning) return;
+    if (this.isRunning) {
+      try {
+        this.recognition.stop();
+      } catch (error) {
+        console.error("Could not reset recognition before restart:", error);
+      }
+      this.isRunning = false;
+    }
 
     this.isCountingMode = true;
     this.currentMantra = mantra;
@@ -58,7 +65,7 @@ class VoiceService {
       const overlapRatio = overlapCount / targetWords.length;
 
       // More forgiving than strict 80%: real speech input often drops words.
-      return overlapRatio >= 0.6;
+      return overlapRatio >= 0.35;
     };
 
     this.recognition.onresult = (event) => {
@@ -71,7 +78,12 @@ class VoiceService {
         const now = Date.now();
         const canCountByTime = now - lastMatchAt > cooldownMs;
 
-        if (isTranscriptMatch(transcript) && canCountByTime) {
+        const hasRecognizedSpeech = transcript.split(/\s+/).filter(Boolean).length >= 2;
+        const shouldCount =
+          (target ? isTranscriptMatch(transcript) : hasRecognizedSpeech) ||
+          (!target && transcript.length > 0);
+
+        if (shouldCount && canCountByTime) {
           onMatch();
           lastMatchAt = now;
         }
@@ -99,7 +111,7 @@ class VoiceService {
     this.recognition.onerror = (event) => {
       this.isRunning = false;
       if (event.error !== "no-speech") {
-        onError?.(`Microphone error: ${event.error}`);
+        onError?.(event.error || "unknown");
       }
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
         this.isCountingMode = false;
@@ -108,9 +120,11 @@ class VoiceService {
 
     try {
       this.recognition.start();
+      return true;
     } catch (error) {
       onError?.("Could not start microphone.");
       console.error("Could not start recognition:", error);
+      return false;
     }
   }
 
