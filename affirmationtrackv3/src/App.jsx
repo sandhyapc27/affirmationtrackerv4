@@ -1,6 +1,7 @@
 import { useState } from "react";
 import HomeScreen from "./HomeScreen";
 import OnboardingFlow from "./OnboardingFlow";
+import Paywall from "./Paywall";
 
 const ONBOARDING_DONE_KEY = "neuroaffirm_onboarding_done";
 
@@ -18,19 +19,27 @@ function shouldShowOnboarding() {
 }
 
 function App() {
-  const [showOnboarding, setShowOnboarding] = useState(() => shouldShowOnboarding());
+  const [screen, setScreen] = useState(() => (shouldShowOnboarding() ? "onboarding" : "home"));
 
   const finishOnboarding = () => {
+    setScreen("paywall");
+  };
+
+  const finishPaywall = () => {
     try {
       localStorage.setItem(ONBOARDING_DONE_KEY, "true");
     } catch {
       /* ignore */
     }
-    setShowOnboarding(false);
+    setScreen("home");
   };
 
-  if (showOnboarding) {
+  if (screen === "onboarding") {
     return <OnboardingFlow onComplete={finishOnboarding} />;
+  }
+
+  if (screen === "paywall") {
+    return <Paywall onContinue={finishPaywall} onSkip={finishPaywall} />;
   }
 
   return <HomeScreen />;

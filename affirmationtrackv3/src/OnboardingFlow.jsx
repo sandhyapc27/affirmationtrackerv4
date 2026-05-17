@@ -5,7 +5,7 @@ const SCREENS = [
     id: "welcome", type: "static", eyebrow: null,
     headline: "Neuro Affirm",
     body: null,
-    tagline: "Rewire Your Mind. With Your Voice.",
+    tagline: "Rewire Your Mind. Manifest Your Dreams With Your Voice.",
     cta: "Begin",
   },
   {
@@ -372,7 +372,6 @@ export default function OnboardingFlow({ onComplete }) {
             }}>{screen.cta}</button>
           )}
 
-          {isFinal && <p style={{ fontFamily: dm, fontSize: 13, fontWeight: 500, color: "rgba(232,228,240,0.35)", textAlign: "center", marginTop: 10 }}>No account needed. Your neural training is private.</p>}
           </div>
           )}{/* end pinned bottom */}
         </div>
