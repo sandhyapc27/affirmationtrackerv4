@@ -813,56 +813,6 @@ Return ONLY a JSON array of 3 strings.`,
               </button>
 
               <button
-                onClick={() => setCurrentScreen("trackSetup")}
-                style={{
-                  flex: 1,
-                  padding: "28px 24px",
-                  borderRadius: 22,
-                  cursor: "pointer",
-                  border: "1px solid rgba(167,139,202,0.25)",
-                  background:
-                    "linear-gradient(160deg, rgba(167,139,202,0.10) 0%, rgba(167,139,202,0.02) 100%)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 20,
-                  animation: "fadeUp 0.8s ease both 0.5s",
-                }}
-              >
-                <div
-                  style={{
-                    width: 62,
-                    height: 62,
-                    borderRadius: "50%",
-                    border: "1.5px solid rgba(167,139,202,0.35)",
-                    background: "rgba(167,139,202,0.08)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  <span style={{ fontSize: 26, color: "#BBA3DE" }}>●</span>
-                </div>
-                <div style={{ textAlign: "left" }}>
-                  <p style={{ fontFamily: cg, fontSize: 28, fontWeight: 700, color: "#FFFFFF", margin: "0 0 4px" }}>
-                    Track
-                  </p>
-                  <p
-                    style={{
-                      fontFamily: dm,
-                      fontSize: 14,
-                      fontWeight: 400,
-                      color: "rgba(232,228,240,0.55)",
-                      margin: 0,
-                      lineHeight: 1.4,
-                    }}
-                  >
-                    Record and count your repetitions
-                  </p>
-                </div>
-              </button>
-
-              <button
                 onClick={() => setCurrentScreen("library")}
                 style={{
                   flex: 1,
@@ -875,7 +825,7 @@ Return ONLY a JSON array of 3 strings.`,
                   display: "flex",
                   alignItems: "center",
                   gap: 20,
-                  animation: "fadeUp 0.8s ease both 0.6s",
+                  animation: "fadeUp 0.8s ease both 0.5s",
                 }}
               >
                 <div
@@ -908,6 +858,56 @@ Return ONLY a JSON array of 3 strings.`,
                     }}
                   >
                     Play back and browse your saved affirmations in your library
+                  </p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setCurrentScreen("trackSetup")}
+                style={{
+                  flex: 1,
+                  padding: "28px 24px",
+                  borderRadius: 22,
+                  cursor: "pointer",
+                  border: "1px solid rgba(167,139,202,0.25)",
+                  background:
+                    "linear-gradient(160deg, rgba(167,139,202,0.10) 0%, rgba(167,139,202,0.02) 100%)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 20,
+                  animation: "fadeUp 0.8s ease both 0.6s",
+                }}
+              >
+                <div
+                  style={{
+                    width: 62,
+                    height: 62,
+                    borderRadius: "50%",
+                    border: "1.5px solid rgba(167,139,202,0.35)",
+                    background: "rgba(167,139,202,0.08)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <span style={{ fontSize: 26, color: "#BBA3DE" }}>●</span>
+                </div>
+                <div style={{ textAlign: "left" }}>
+                  <p style={{ fontFamily: cg, fontSize: 28, fontWeight: 700, color: "#FFFFFF", margin: "0 0 4px" }}>
+                    Repeat
+                  </p>
+                  <p
+                    style={{
+                      fontFamily: dm,
+                      fontSize: 14,
+                      fontWeight: 400,
+                      color: "rgba(232,228,240,0.55)",
+                      margin: 0,
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    Record and count your repetitions
                   </p>
                 </div>
               </button>
